@@ -1,0 +1,67 @@
+/* 设计 token —— 全部取自 02《个人学习平台页面设计说明》视觉基线
+ * 修改颜色/尺寸只改这一个文件，不要在各页面里写死色值
+ */
+
+:root {
+  /* 颜色 */
+  --c-text: #171917;
+  --c-text-muted: #5a6358;
+  --c-green: #526c35;
+  --c-green-soft: #dcebd9;
+  --c-accent: #e83a0a;
+  --c-accent-dark: #c93008;
+  --c-bg: #fff7ec;
+  --c-surface: #ffffff;
+  --c-border: #e7e1d6;
+  --c-border-strong: #d5cdbf;
+  --c-danger: #bb3025;
+
+  /* 掌握程度三档 */
+  --c-mastery-none: #f6d5ba;
+  --c-mastery-familiar: #dde9b6;
+  --c-mastery-skilled: #cbe6e0;
+
+  /* 字体 */
+  --font-sans: 'Noto Sans CJK SC', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei',
+    'Hiragino Sans GB', system-ui, -apple-system, sans-serif;
+
+  /* 字号：首页 48–64 / 业务页 32 / 区域 20 / 正文 16 / 辅助 14 */
+  --fs-hero: clamp(36px, 4.4vw, 64px);
+  --fs-title: 32px;
+  --fs-section: 20px;
+  --fs-body: 16px;
+  --fs-sub: 14px;
+
+  /* 间距 8 / 16 / 24 / 40 */
+  --sp-1: 8px;
+  --sp-2: 16px;
+  --sp-3: 24px;
+  --sp-4: 40px;
+
+  /* 圆角：卡片 16 / 导航胶囊 28 */
+  --r-card: 16px;
+  --r-nav: 28px;
+  --r-field: 10px;
+  --r-tag: 999px;
+
+  /* 尺寸 */
+  --h-control: 44px;
+  --nav-h: 68px;
+  --tabbar-h: 60px;
+  --page-max: 1440px;
+  --page-pad: 32px;
+
+  /* 阴影 */
+  --shadow-nav: 0 2px 14px rgba(23, 25, 23, 0.07);
+  --shadow-card: 0 2px 10px rgba(23, 25, 23, 0.05);
+  --shadow-modal: 0 12px 40px rgba(23, 25, 23, 0.18);
+}
+
+@media (max-width: 767px) {
+  :root {
+    --fs-title: 24px;
+    --fs-section: 18px;
+    --page-pad: 16px;
+    --nav-h: 56px;
+  }
+}
