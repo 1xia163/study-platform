@@ -14,6 +14,8 @@ export default defineConfig({
   server: {
     port: 5173,
     open: false,
+    // 监听所有网卡，手机和同一 Wi-Fi 下的队友可以用 Network 地址访问
+    host: true,
   },
   build: {
     // 输出较保守的语法，避免 @media 被压成 width<=767px 这类新语法，
