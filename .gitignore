@@ -26,3 +26,6 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# 临时文件（临时脚本、中间产物、提取文本），见 AGENTS.md
+.tmp/
