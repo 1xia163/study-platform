@@ -58,6 +58,19 @@ export function isValidDateString(dateString) {
 }
 
 /**
+ * 在 'YYYY-MM-DD' 上加减天数，用于生成相对今天的演示数据、计算延期日期
+ * @param {string} dateString 'YYYY-MM-DD'
+ * @param {number} days 正数往后、负数往前
+ * @returns {string} 'YYYY-MM-DD'；非法输入返回 ''
+ */
+export function addDays(dateString, days) {
+  const date = parseDate(dateString)
+  if (!date) return ''
+  date.setDate(date.getDate() + Number(days || 0))
+  return toDateString(date)
+}
+
+/**
  * 是否早于今天（昨天以前）
  * @param {string} dateString 'YYYY-MM-DD'
  * @returns {boolean}
