@@ -1,26 +1,39 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
+import BaseModal from '@/components/BaseModal.vue'
 import PageHeader from '@/components/PageHeader.vue'
-import { priorityLabel } from '@/constants/priority'
+import TaskCard from '@/components/TaskCard.vue'
 import { useTaskStore } from '@/stores/task'
-import { formatMonthDay, isOverdue } from '@/utils/date'
 
 const taskStore = useTaskStore()
 
 const tasks = computed(() => taskStore.sortedByDeadline)
 const pendingCount = computed(() => taskStore.totalCount - taskStore.completedCount)
 
-const STATUS_META = {
-  done: { label: '已完成', className: 'tag--familiar' },
-  overdue: { label: '已逾期', className: 'tag--none' },
-  pending: { label: '未完成', className: 'tag--outline' },
+const deletingTask = ref(null)
+const deleteOpen = computed({
+  get: () => deletingTask.value !== null,
+  set: (open) => {
+    if (!open) deletingTask.value = null
+  },
+})
+const deleteTitle = computed(() =>
+  deletingTask.value ? `删除任务「${deletingTask.value.title}」？` : '删除任务',
+)
+
+function handleToggle(task) {
+  taskStore.toggleComplete(task.taskId)
 }
 
-function statusOf(task) {
-  if (task.isCompleted) return STATUS_META.done
-  if (isOverdue(task.deadline, task.isCompleted)) return STATUS_META.overdue
-  return STATUS_META.pending
+function handleDelete(task) {
+  deletingTask.value = task
+}
+
+function confirmDelete() {
+  if (!deletingTask.value) return
+  taskStore.removeTask(deletingTask.value.taskId)
+  deletingTask.value = null
 }
 </script>
 
@@ -45,24 +58,24 @@ function statusOf(task) {
       {{ taskStore.completedCount }} 条，已逾期 {{ taskStore.overdueTasks.length }} 条。
     </p>
 
-    <ul class="stack">
-      <li v-for="task in tasks" :key="task.taskId" class="card task-item">
-        <div class="task-item__main">
-          <h2 class="task-item__title">{{ task.title }}</h2>
-          <p class="task-item__meta small muted">
-            {{ task.course }}
-            <template v-if="task.knowledgePoint"> · {{ task.knowledgePoint }}</template>
-            · 截止
-            <time :datetime="task.deadline">{{ formatMonthDay(task.deadline) }}</time>
-          </p>
-        </div>
+    <div class="stack">
+      <TaskCard
+        v-for="task in tasks"
+        :key="task.taskId"
+        :task="task"
+        @toggle="handleToggle"
+        @delete="handleDelete"
+      />
+    </div>
 
-        <div class="task-item__tags">
-          <span class="tag tag--outline">优先级 {{ priorityLabel(task.priority) }}</span>
-          <span class="tag" :class="statusOf(task).className">{{ statusOf(task).label }}</span>
-        </div>
-      </li>
-    </ul>
+    <BaseModal v-model="deleteOpen" :title="deleteTitle" desc="删除后无法恢复。" size="sm">
+      <template #footer>
+        <button class="btn btn--sm btn--ghost" type="button" @click="deleteOpen = false">
+          取消
+        </button>
+        <button class="btn btn--sm btn--danger" type="button" @click="confirmDelete">删除</button>
+      </template>
+    </BaseModal>
   </div>
 </template>
 
@@ -71,44 +84,5 @@ function statusOf(task) {
   margin-bottom: var(--sp-3);
   color: var(--c-green);
   font-size: var(--fs-sub);
-}
-
-.task-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-2);
-}
-
-.task-item__main {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.task-item__title {
-  font-size: var(--fs-body);
-  font-weight: 500;
-  line-height: 1.4;
-}
-
-.task-item__tags {
-  display: flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--sp-1);
-}
-
-@media (max-width: 767px) {
-  .task-item {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .task-item__tags {
-    justify-content: flex-start;
-  }
 }
 </style>
