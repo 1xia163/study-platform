@@ -4,12 +4,16 @@ import { computed, ref } from 'vue'
 import BaseModal from '@/components/BaseModal.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import TaskCard from '@/components/TaskCard.vue'
+import TaskForm from '@/components/TaskForm.vue'
 import { useTaskStore } from '@/stores/task'
 
 const taskStore = useTaskStore()
 
 const tasks = computed(() => taskStore.sortedByDeadline)
 const pendingCount = computed(() => taskStore.totalCount - taskStore.completedCount)
+
+const formOpen = ref(false)
+const editingTask = ref(null)
 
 const deletingTask = ref(null)
 const deleteOpen = computed({
@@ -24,6 +28,26 @@ const deleteTitle = computed(() =>
 
 function handleToggle(task) {
   taskStore.toggleComplete(task.taskId)
+}
+
+function openCreate() {
+  editingTask.value = null
+  formOpen.value = true
+}
+
+function openEdit(task) {
+  editingTask.value = task
+  formOpen.value = true
+}
+
+function handleSubmit(payload) {
+  if (editingTask.value) {
+    taskStore.updateTask(editingTask.value.taskId, payload)
+  } else {
+    taskStore.addTask(payload)
+  }
+  formOpen.value = false
+  editingTask.value = null
 }
 
 function handleDelete(task) {
@@ -47,9 +71,9 @@ function confirmDelete() {
       art-src="/illustrations/p02-plan-calendar.png"
     >
       <template #actions>
-        <RouterLink class="btn btn--primary btn--sm" :to="{ name: 'plan', query: { action: 'new' } }">
+        <button class="btn btn--primary btn--sm" type="button" @click="openCreate">
           新建任务
-        </RouterLink>
+        </button>
       </template>
     </PageHeader>
 
@@ -64,9 +88,12 @@ function confirmDelete() {
         :key="task.taskId"
         :task="task"
         @toggle="handleToggle"
+        @edit="openEdit"
         @delete="handleDelete"
       />
     </div>
+
+    <TaskForm v-model="formOpen" :task="editingTask" @submit="handleSubmit" />
 
     <BaseModal v-model="deleteOpen" :title="deleteTitle" desc="删除后无法恢复。" size="sm">
       <template #footer>
