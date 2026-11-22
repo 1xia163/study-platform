@@ -16,6 +16,7 @@ const isEdit = computed(() => Boolean(noteId.value))
       :title="isEdit ? '编辑笔记' : '新建笔记'"
       desc="课程、知识点和掌握程度串联任务、笔记与自测；保存后才更新列表和首页。"
       art="相片与图文笔记"
+      art-src="/illustrations/p04-photo-notes.png"
     />
 
     <section class="card">

@@ -9,6 +9,7 @@ import PageHeader from '@/components/PageHeader.vue'
       title="专注学习"
       desc="支持从任务开始或独立专注；切换页面后保留计时，专注记录用于首页复盘。"
       art="书桌与专注时钟"
+      art-src="/illustrations/p05-focus-desk.png"
     />
 
     <section class="card">

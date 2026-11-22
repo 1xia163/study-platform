@@ -8,7 +8,8 @@ import PageHeader from '@/components/PageHeader.vue'
       eyebrow="P01 · F01 / F05"
       title="学习首页"
       desc="承接今日行动与学习复盘，主要入口始终是计划、笔记和专注。"
-      art="首页场景插画"
+      art="学习校园"
+      art-src="/illustrations/p01-home-campus.png"
     />
 
     <section class="card">

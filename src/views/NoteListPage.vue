@@ -9,6 +9,7 @@ import PageHeader from '@/components/PageHeader.vue'
       title="课程笔记"
       desc="按课程和知识点找笔记，再决定继续编辑、复习或用真题检验理解。"
       art="书籍与课程笔记"
+      art-src="/illustrations/p03-note-library.png"
     >
       <template #actions>
         <RouterLink class="btn btn--primary btn--sm" :to="{ name: 'note-new' }">新建笔记</RouterLink>
