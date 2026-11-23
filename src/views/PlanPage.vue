@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 import BaseModal from '@/components/BaseModal.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -8,9 +9,10 @@ import SearchFilterBar from '@/components/SearchFilterBar.vue'
 import TaskCard from '@/components/TaskCard.vue'
 import TaskForm from '@/components/TaskForm.vue'
 import { useTaskStore } from '@/stores/task'
-import { compareDateString, isOverdue } from '@/utils/date'
+import { compareDateString, isBeforeToday, isOverdue, isValidDateString, todayString } from '@/utils/date'
 
 const taskStore = useTaskStore()
+const router = useRouter()
 
 const pendingCount = computed(() => taskStore.totalCount - taskStore.completedCount)
 
@@ -25,6 +27,8 @@ const STATUS_OPTIONS = [
   { value: 'completed', label: '已完成' },
   { value: 'overdue', label: '逾期' },
 ]
+
+const minimumDate = todayString()
 
 const filteredTasks = computed(() => {
   const word = keyword.value.trim().toLowerCase()
@@ -108,6 +112,56 @@ function confirmDelete() {
   if (!deletingTask.value) return
   taskStore.removeTask(deletingTask.value.taskId)
   deletingTask.value = null
+}
+
+const postponingTask = ref(null)
+const postponeDate = ref('')
+const postponeError = ref('')
+const postponeOpen = computed({
+  get: () => postponingTask.value !== null,
+  set: (open) => {
+    if (!open) {
+      postponingTask.value = null
+      postponeError.value = ''
+    }
+  },
+})
+const postponeTitle = computed(() =>
+  postponingTask.value ? `延期任务「${postponingTask.value.title}」` : '延期任务',
+)
+
+function openPostpone(task) {
+  postponingTask.value = task
+  postponeDate.value = task.deadline
+  postponeError.value = ''
+}
+
+function confirmPostpone() {
+  if (!postponingTask.value) return
+
+  if (!postponeDate.value) {
+    postponeError.value = '请选择新的截止日期'
+    return
+  }
+  if (!isValidDateString(postponeDate.value)) {
+    postponeError.value = '请选择有效日期'
+    return
+  }
+  if (isBeforeToday(postponeDate.value)) {
+    postponeError.value = '延期日期不能早于今天'
+    return
+  }
+
+  taskStore.postponeTask(postponingTask.value.taskId, postponeDate.value)
+  postponingTask.value = null
+  postponeError.value = ''
+}
+
+function goLinkNote(task) {
+  const query = { pick: '1', sourceTaskId: task.taskId }
+  if (task.course) query.course = task.course
+  if (task.knowledgePoint) query.knowledgePoint = task.knowledgePoint
+  router.push({ name: 'note-list', query })
 }
 </script>
 
@@ -195,6 +249,8 @@ function confirmDelete() {
         @toggle="handleToggle"
         @edit="openEdit"
         @delete="handleDelete"
+        @postpone="openPostpone"
+        @link-note="goLinkNote"
       />
     </div>
 
@@ -206,6 +262,36 @@ function confirmDelete() {
           取消
         </button>
         <button class="btn btn--sm btn--danger" type="button" @click="confirmDelete">删除</button>
+      </template>
+    </BaseModal>
+
+    <BaseModal
+      v-model="postponeOpen"
+      :title="postponeTitle"
+      desc="选一个新的截止日期，任务内容和其他设置不变。"
+      size="sm"
+    >
+      <div class="field">
+        <label class="field__label" for="postpone-date">新的截止日期<span class="req">*</span></label>
+        <input
+          id="postpone-date"
+          v-model="postponeDate"
+          class="input"
+          :class="{ 'input--invalid': postponeError }"
+          type="date"
+          :min="minimumDate"
+          @input="postponeError = ''"
+        />
+        <p v-if="postponeError" class="field__error">{{ postponeError }}</p>
+      </div>
+
+      <template #footer>
+        <button class="btn btn--sm btn--ghost" type="button" @click="postponeOpen = false">
+          取消
+        </button>
+        <button class="btn btn--sm btn--green" type="button" @click="confirmPostpone">
+          保存延期
+        </button>
       </template>
     </BaseModal>
   </div>
