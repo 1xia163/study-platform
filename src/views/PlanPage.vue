@@ -1,6 +1,6 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import BaseModal from '@/components/BaseModal.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -8,10 +8,12 @@ import PageHeader from '@/components/PageHeader.vue'
 import SearchFilterBar from '@/components/SearchFilterBar.vue'
 import TaskCard from '@/components/TaskCard.vue'
 import TaskForm from '@/components/TaskForm.vue'
+import { isValidCourse, isValidKnowledgePoint } from '@/constants/courses'
 import { useTaskStore } from '@/stores/task'
-import { compareDateString, isBeforeToday, isOverdue, isValidDateString, todayString } from '@/utils/date'
+import { compareDateString, formatMonthDay, isBeforeToday, isOverdue, isValidDateString, todayString } from '@/utils/date'
 
 const taskStore = useTaskStore()
+const route = useRoute()
 const router = useRouter()
 
 const pendingCount = computed(() => taskStore.totalCount - taskStore.completedCount)
@@ -68,6 +70,66 @@ function resetFilters() {
 
 const formOpen = ref(false)
 const editingTask = ref(null)
+const sourcePreset = ref(null)
+
+const sourcePresetLabel = computed(() => {
+  const preset = sourcePreset.value
+  if (!preset) return ''
+  const parts = []
+  if (preset.title) parts.push(preset.title)
+  if (preset.course) parts.push(preset.course)
+  if (preset.knowledgePoint) parts.push(preset.knowledgePoint)
+  if (preset.deadline) parts.push(`截止 ${formatMonthDay(preset.deadline)}`)
+  return parts.join(' · ')
+})
+
+const QUERY_KEYS = ['action', 'title', 'course', 'knowledgePoint', 'deadline']
+let appliedQueryKey = ''
+
+function queryKeyOf(query) {
+  return QUERY_KEYS.map((key) => `${key}=${query[key] ?? ''}`).join('&')
+}
+
+function readQuery() {
+  const query = route.query
+  const key = queryKeyOf(query)
+  if (key === appliedQueryKey) return
+  appliedQueryKey = key
+
+  // 用户已经在填表单时，新的 query 不覆盖已填内容
+  if (formOpen.value) return
+
+  const preset = {}
+  const title = typeof query.title === 'string' ? query.title.trim() : ''
+  if (title) preset.title = title
+
+  const course = typeof query.course === 'string' ? query.course : ''
+  if (course && isValidCourse(course)) preset.course = course
+
+  const point = typeof query.knowledgePoint === 'string' ? query.knowledgePoint : ''
+  if (preset.course && point && isValidKnowledgePoint(preset.course, point)) {
+    preset.knowledgePoint = point
+  }
+
+  const deadline = typeof query.deadline === 'string' ? query.deadline : ''
+  if (deadline && isValidDateString(deadline)) preset.deadline = deadline
+
+  sourcePreset.value = Object.keys(preset).length > 0 ? preset : null
+
+  if (query.action === 'new') {
+    editingTask.value = null
+    formOpen.value = true
+  }
+}
+
+watch(() => route.query, readQuery, { immediate: true })
+
+function clearSourceQuery() {
+  sourcePreset.value = null
+  if (Object.keys(route.query).length > 0) {
+    router.replace({ name: 'plan' })
+  }
+}
 
 const deletingTask = ref(null)
 const deleteOpen = computed({
@@ -102,6 +164,12 @@ function handleSubmit(payload) {
   }
   formOpen.value = false
   editingTask.value = null
+
+  // 预填已消费，清掉地址栏来源参数，刷新后不再自动弹表单
+  if (Object.keys(route.query).length > 0) {
+    sourcePreset.value = null
+    router.replace({ name: 'plan' })
+  }
 }
 
 function handleDelete(task) {
@@ -181,6 +249,13 @@ function goLinkNote(task) {
       </template>
     </PageHeader>
 
+    <div v-if="sourcePreset" class="card card--soft plan-source">
+      <p class="small">来源条件：{{ sourcePresetLabel }}</p>
+      <button class="btn btn--ghost btn--sm" type="button" @click="clearSourceQuery">
+        清除来源条件
+      </button>
+    </div>
+
     <p class="plan-summary card card--soft">
       共 {{ taskStore.totalCount }} 条任务，未完成 {{ pendingCount }} 条，已完成
       {{ taskStore.completedCount }} 条，已逾期 {{ taskStore.overdueTasks.length }} 条。
@@ -254,7 +329,7 @@ function goLinkNote(task) {
       />
     </div>
 
-    <TaskForm v-model="formOpen" :task="editingTask" @submit="handleSubmit" />
+    <TaskForm v-model="formOpen" :task="editingTask" :preset="sourcePreset" @submit="handleSubmit" />
 
     <BaseModal v-model="deleteOpen" :title="deleteTitle" desc="删除后无法恢复。" size="sm">
       <template #footer>
@@ -302,6 +377,16 @@ function goLinkNote(task) {
   margin-bottom: var(--sp-3);
   color: var(--c-green);
   font-size: var(--fs-sub);
+}
+
+.plan-source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+  color: var(--c-green);
 }
 
 .filter-control {

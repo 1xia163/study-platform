@@ -80,6 +80,7 @@ watch(
   (isOpen) => {
     if (isOpen) fillForm()
   },
+  { immediate: true },
 )
 
 function onCourseChange() {
