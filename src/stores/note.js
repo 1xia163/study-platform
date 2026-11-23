@@ -131,6 +131,21 @@ export const useNoteStore = defineStore('note', {
       this.notes.splice(index, 1)
       return true
     },
+
+    /** 关联到任务时只维护关系，不刷新 updatedAt，避免列表顺序无故变化 */
+    linkTask(noteId, taskId) {
+      const note = this.notes.find((item) => item.noteId === noteId)
+      if (!note || !taskId) return null
+      if (!note.linkedTaskIds.includes(taskId)) note.linkedTaskIds.push(taskId)
+      return note
+    },
+
+    unlinkTask(noteId, taskId) {
+      const note = this.notes.find((item) => item.noteId === noteId)
+      if (!note) return null
+      note.linkedTaskIds = note.linkedTaskIds.filter((id) => id !== taskId)
+      return note
+    },
   },
 
   persist: true,
