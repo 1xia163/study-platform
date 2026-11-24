@@ -113,7 +113,13 @@ async function attachExistingPhotos(notePhotos) {
 
 function fillFromQuery() {
   const query = route.query
-  const taskId = typeof query.sourceTaskId === 'string' ? query.sourceTaskId : ''
+  // AGENTS 约定 /note/new 用 taskId，笔记列表的 pick 流程用 sourceTaskId，两个都支持
+  const taskId =
+    typeof query.taskId === 'string'
+      ? query.taskId
+      : typeof query.sourceTaskId === 'string'
+        ? query.sourceTaskId
+        : ''
   const task = taskId ? taskStore.tasks.find((item) => item.taskId === taskId) : null
 
   const course = typeof query.course === 'string' ? query.course : (task?.course ?? '')
