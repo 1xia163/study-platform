@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 
 import BaseModal from '@/components/BaseModal.vue'
@@ -8,6 +8,7 @@ import { COURSE_NAMES, isValidCourse, knowledgePointsOf } from '@/constants/cour
 import { DEFAULT_MASTERY, MASTERY } from '@/constants/mastery'
 import { useNoteStore } from '@/stores/note'
 import { useTaskStore } from '@/stores/task'
+import { deletePhoto, getPhoto, putPhoto } from '@/utils/photoDb'
 
 const route = useRoute()
 const router = useRouter()
@@ -33,10 +34,21 @@ const errors = reactive({
   content: '',
 })
 
+const MAX_PHOTOS = 6
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024
+const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
 const photos = ref([])
+const removedPhotoIds = ref([])
+const photoError = ref('')
+const previewOpen = ref(false)
+const previewSrc = ref('')
+const previewAlt = ref('')
+
 const saving = ref(false)
 const baseline = ref('')
 let bypassGuard = false
+let loadToken = 0
 
 const knowledgePoints = computed(() => knowledgePointsOf(form.course))
 const isDirty = computed(() => baseline.value !== '' && snapshot() !== baseline.value)
@@ -49,6 +61,7 @@ function snapshot() {
     tagsText: form.tagsText,
     content: form.content,
     mastery: form.mastery,
+    photoIds: photos.value.map((photo) => photo.photoId),
   })
 }
 
@@ -58,6 +71,14 @@ function clearErrors() {
   })
 }
 
+function createPhotoId() {
+  return `photo-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function revokeBlobUrl(url) {
+  if (typeof url === 'string' && url.startsWith('blob:')) URL.revokeObjectURL(url)
+}
+
 function fillFromNote(note) {
   form.title = note.title ?? ''
   form.course = note.course ?? ''
@@ -65,7 +86,29 @@ function fillFromNote(note) {
   form.tagsText = Array.isArray(note.tags) ? note.tags.join('，') : ''
   form.content = note.content ?? ''
   form.mastery = note.mastery ?? DEFAULT_MASTERY
-  photos.value = Array.isArray(note.photos) ? [...note.photos] : []
+  attachExistingPhotos(Array.isArray(note.photos) ? note.photos : [])
+}
+
+/** 先渲染元数据（含演示占位图），再异步把 IndexedDB 里的二进制换成 blob URL */
+async function attachExistingPhotos(notePhotos) {
+  const token = loadToken
+  photos.value = notePhotos.map((photo) => ({
+    photoId: photo.photoId,
+    fileName: photo.fileName,
+    fallbackSrc: photo.fallbackSrc ?? '',
+    isNew: false,
+    blob: null,
+    url: photo.fallbackSrc ?? '',
+  }))
+
+  for (let index = 0; index < photos.value.length; index += 1) {
+    const photoId = photos.value[index].photoId
+    const blob = await getPhoto(photoId)
+    if (token !== loadToken || !blob) continue
+    const target = photos.value[index]
+    if (!target || target.photoId !== photoId) continue
+    target.url = URL.createObjectURL(blob)
+  }
 }
 
 function fillFromQuery() {
@@ -90,10 +133,14 @@ function resetForm() {
   form.tagsText = ''
   form.content = ''
   form.mastery = DEFAULT_MASTERY
+  photos.value.forEach((photo) => revokeBlobUrl(photo.url))
   photos.value = []
+  removedPhotoIds.value = []
+  photoError.value = ''
 }
 
 function load() {
+  loadToken += 1
   clearErrors()
   baseline.value = ''
   resetForm()
@@ -140,6 +187,14 @@ function parseTags(text) {
   return [...new Set(String(text).split(/[,，、]/).map((item) => item.trim()).filter(Boolean))]
 }
 
+function buildPhotoMeta() {
+  return photos.value.map((photo, index) => {
+    const meta = { photoId: photo.photoId, fileName: photo.fileName, sortOrder: index }
+    if (photo.fallbackSrc) meta.fallbackSrc = photo.fallbackSrc
+    return meta
+  })
+}
+
 function buildPayload() {
   return {
     title: form.title.trim(),
@@ -148,7 +203,23 @@ function buildPayload() {
     tags: parseTags(form.tagsText),
     content: form.content.trim(),
     mastery: form.mastery,
+    photos: buildPhotoMeta(),
   }
+}
+
+/** 新照片写 IndexedDB、被移除的照片删掉；两者都成功后才更新 localStorage 元数据 */
+async function persistPhotos() {
+  const removed = [...removedPhotoIds.value]
+  for (const photo of photos.value) {
+    if (photo.isNew && photo.blob) await putPhoto(photo.photoId, photo.blob)
+  }
+  for (const photoId of removed) await deletePhoto(photoId)
+
+  removedPhotoIds.value = []
+  photos.value.forEach((photo) => {
+    photo.isNew = false
+    photo.blob = null
+  })
 }
 
 async function save() {
@@ -158,6 +229,14 @@ async function save() {
   // 本地存储没有真实网络延迟，这里留一小段等待以呈现「保存中」并防重复提交
   await new Promise((resolve) => setTimeout(resolve, 300))
 
+  try {
+    await persistPhotos()
+  } catch {
+    photoError.value = '照片保存失败，请重试'
+    saving.value = false
+    return false
+  }
+
   const payload = buildPayload()
   if (isEdit.value) noteStore.updateNote(noteId.value, payload)
   else noteStore.addNote(payload)
@@ -166,6 +245,72 @@ async function save() {
   baseline.value = snapshot()
   return true
 }
+
+function onFilesSelected(event) {
+  const files = Array.from(event.target.files ?? [])
+  event.target.value = ''
+  if (!files.length) return
+
+  photoError.value = ''
+  let message = ''
+
+  for (const file of files) {
+    if (photos.value.length >= MAX_PHOTOS) {
+      message = `最多只能添加 ${MAX_PHOTOS} 张照片`
+      break
+    }
+    if (!ACCEPTED_TYPES.includes(file.type)) {
+      message = `${file.name} 不是 JPEG / PNG / WebP 图片`
+      continue
+    }
+    if (file.size > MAX_PHOTO_BYTES) {
+      message = `${file.name} 超过 5MB`
+      continue
+    }
+    photos.value.push({
+      photoId: createPhotoId(),
+      fileName: file.name,
+      fallbackSrc: '',
+      isNew: true,
+      blob: file,
+      url: URL.createObjectURL(file),
+    })
+  }
+
+  if (message) photoError.value = message
+}
+
+function movePhoto(index, offset) {
+  const target = index + offset
+  if (target < 0 || target >= photos.value.length) return
+  const list = [...photos.value]
+  const [item] = list.splice(index, 1)
+  list.splice(target, 0, item)
+  photos.value = list
+}
+
+function removePhoto(index) {
+  const [item] = photos.value.splice(index, 1)
+  if (!item) return
+  revokeBlobUrl(item.url)
+  if (!item.isNew) removedPhotoIds.value.push(item.photoId)
+  photoError.value = ''
+}
+
+function openPreview(index) {
+  const photo = photos.value[index]
+  if (!photo || !photo.url) {
+    photoError.value = '这张演示照片没有实际图片，添加新照片后可预览'
+    return
+  }
+  previewSrc.value = photo.url
+  previewAlt.value = photo.fileName
+  previewOpen.value = true
+}
+
+onBeforeUnmount(() => {
+  photos.value.forEach((photo) => revokeBlobUrl(photo.url))
+})
 
 async function handleSave() {
   const ok = await save()
@@ -326,6 +471,72 @@ async function saveAndLeave() {
           本笔记已有 {{ photos.length }} 张照片，正文可以留空。
         </p>
       </div>
+
+      <div class="field">
+        <span class="field__label">照片（最多 {{ MAX_PHOTOS }} 张）</span>
+
+        <div class="photo-grid">
+          <figure v-for="(photo, index) in photos" :key="photo.photoId" class="photo-tile">
+            <button
+              class="photo-tile__preview"
+              type="button"
+              :aria-label="`预览 ${photo.fileName}`"
+              @click="openPreview(index)"
+            >
+              <img v-if="photo.url" :src="photo.url" :alt="photo.fileName" />
+              <span v-else class="photo-tile__placeholder">暂无预览</span>
+            </button>
+
+            <figcaption class="photo-tile__name">{{ photo.fileName }}</figcaption>
+
+            <div class="photo-tile__actions">
+              <button
+                class="btn btn--sm btn--ghost"
+                type="button"
+                :disabled="index === 0"
+                :aria-label="`前移 ${photo.fileName}`"
+                @click="movePhoto(index, -1)"
+              >
+                ↑
+              </button>
+              <button
+                class="btn btn--sm btn--ghost"
+                type="button"
+                :disabled="index === photos.length - 1"
+                :aria-label="`后移 ${photo.fileName}`"
+                @click="movePhoto(index, 1)"
+              >
+                ↓
+              </button>
+              <button
+                class="btn btn--sm btn--danger"
+                type="button"
+                :aria-label="`移除 ${photo.fileName}`"
+                @click="removePhoto(index)"
+              >
+                移除
+              </button>
+            </div>
+          </figure>
+
+          <label v-if="photos.length < MAX_PHOTOS" class="photo-add">
+            <input
+              class="sr-only"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              @change="onFilesSelected"
+            />
+            <span class="photo-add__icon" aria-hidden="true">＋</span>
+            <span class="photo-add__text">添加照片</span>
+          </label>
+        </div>
+
+        <p v-if="photoError" class="field__error">{{ photoError }}</p>
+        <p v-else class="small muted">
+          支持 JPEG / PNG / WebP，单张不超过 5MB；排序与移除在保存后才生效。
+        </p>
+      </div>
     </form>
 
     <BaseModal
@@ -349,6 +560,15 @@ async function saveAndLeave() {
           @click="saveAndLeave"
         >
           {{ saving ? '保存中' : '保存后离开' }}
+        </button>
+      </template>
+    </BaseModal>
+
+    <BaseModal v-model="previewOpen" :title="previewAlt || '照片预览'" size="lg">
+      <img v-if="previewSrc" class="photo-preview" :src="previewSrc" :alt="previewAlt" />
+      <template #footer>
+        <button class="btn btn--sm btn--ghost" type="button" @click="previewOpen = false">
+          关闭
         </button>
       </template>
     </BaseModal>
@@ -401,6 +621,99 @@ async function saveAndLeave() {
   opacity: 1;
 }
 
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--sp-2);
+}
+
+.photo-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: var(--sp-1);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-field);
+  background: var(--c-surface);
+}
+
+.photo-tile__preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border: none;
+  border-radius: var(--r-field);
+  background: var(--c-green-soft);
+  padding: 0;
+}
+
+.photo-tile__preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photo-tile__placeholder {
+  color: var(--c-green);
+  font-size: var(--fs-sub);
+}
+
+.photo-tile__name {
+  overflow: hidden;
+  color: var(--c-text-muted);
+  font-size: var(--fs-sub);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.photo-tile__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.photo-tile__actions .btn {
+  min-width: 36px;
+  padding: 0 8px;
+}
+
+.photo-add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  aspect-ratio: 4 / 3;
+  border: 1px dashed var(--c-border-strong);
+  border-radius: var(--r-field);
+  color: var(--c-text-muted);
+  font-size: var(--fs-sub);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.photo-add:hover {
+  border-color: var(--c-green);
+  color: var(--c-green);
+}
+
+.photo-add__icon {
+  font-size: var(--fs-section);
+  line-height: 1;
+}
+
+.photo-preview {
+  width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+}
+
 @media (max-width: 767px) {
   .note-form__row {
     grid-template-columns: 1fr;
@@ -408,6 +721,10 @@ async function saveAndLeave() {
 
   .note-form__content {
     min-height: 160px;
+  }
+
+  .photo-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   }
 }
 </style>

@@ -27,8 +27,19 @@ function createSeedNotes() {
       content:
         '先序遍历「根左右」、中序遍历「左根右」、后序遍历「左右根」，层次遍历用队列逐层取出节点。',
       photos: [
-        { photoId: 'seed-photo-1-1', fileName: '先序遍历示意图.png', sortOrder: 0 },
-        { photoId: 'seed-photo-1-2', fileName: '中序还原笔记.png', sortOrder: 1 },
+        // fallbackSrc 只是演示占位图：真实二进制在 IndexedDB，这里保证首次进入 P04 有图可看
+        {
+          photoId: 'seed-photo-1-1',
+          fileName: '先序遍历示意图.png',
+          sortOrder: 0,
+          fallbackSrc: '/illustrations/p03-note-library.png',
+        },
+        {
+          photoId: 'seed-photo-1-2',
+          fileName: '中序还原笔记.png',
+          sortOrder: 1,
+          fallbackSrc: '/illustrations/p04-photo-notes.png',
+        },
       ],
       mastery: 'none',
       linkedTaskIds: ['seed-task-1'],
@@ -71,7 +82,14 @@ function createSeedNotes() {
       knowledgePoint: '二叉树遍历',
       tags: ['还原', '递归'],
       content: '先序第一个元素是根，在中序里定位根即可切出左右子树区间，递归重建。',
-      photos: [{ photoId: 'seed-photo-4-1', fileName: '区间切分手稿.png', sortOrder: 0 }],
+      photos: [
+        {
+          photoId: 'seed-photo-4-1',
+          fileName: '区间切分手稿.png',
+          sortOrder: 0,
+          fallbackSrc: '/illustrations/p05-focus-desk.png',
+        },
+      ],
       mastery: 'none',
       linkedTaskIds: ['seed-task-1'],
       sourceTaskId: null,
