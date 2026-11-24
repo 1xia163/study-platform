@@ -47,10 +47,38 @@ function startPhase(timer, phase) {
   timer.pausedPhase = ''
 }
 
+const HOUR = 60 * 60 * 1000
+
+/**
+ * 首次使用的演示专注记录：本周内 2 条，用于首页「本周专注时长」显示非 0 值。
+ * 用「现在 − N 小时」生成，保证落在本周内且不会是未来时间。
+ */
+function createSeedSessions() {
+  const now = Date.now()
+  return [
+    {
+      sessionId: 'seed-focus-1',
+      taskId: 'seed-task-1',
+      course: '数据结构',
+      durationMinutes: 25,
+      startedAt: now - 3 * HOUR - 25 * 60 * 1000,
+      endedAt: now - 3 * HOUR,
+    },
+    {
+      sessionId: 'seed-focus-2',
+      taskId: 'seed-task-2',
+      course: 'Python',
+      durationMinutes: 45,
+      startedAt: now - 1 * HOUR - 45 * 60 * 1000,
+      endedAt: now - 1 * HOUR,
+    },
+  ]
+}
+
 export const useFocusStore = defineStore('focus', {
   state: () => ({
     timer: createIdleTimer(),
-    sessions: [],
+    sessions: createSeedSessions(),
     // 当前时间戳，由页面每秒推进；只用来驱动剩余时间计算，不参与持久化
     nowMs: Date.now(),
   }),
