@@ -188,8 +188,8 @@ npm run preview
 
 | 线 | 成员 | 分支 | 负责页面 | store / 组件 / 工具 |
 | --- | --- | --- | --- | --- |
-| A · 日常学习线 | Turkey-nk | `feat/a-daily` | P01 首页、P02 计划、P03 笔记列表、P04 笔记编辑、P05 专注 | `task.js` `note.js` `focus.js`；`TaskCard` `TaskForm` `NoteCard` `MasteryTag`；`utils/date.js` `utils/photoDb.js` |
-| B · 自测备考线 | B 线成员 | `feat/b-selftest` | P06 题库、P07 组卷、P08 作答、P09 记录错题 | `question.js` `paper.js` `record.js`；`QuestionCard` `AnswerSheet`；`utils/paper.js` |
+| A · 日常学习线 | 魏可欣 | `feat/a-daily` | P01 首页、P02 计划、P03 笔记列表、P04 笔记编辑、P05 专注 | `task.js` `note.js` `focus.js`；`TaskCard` `TaskForm` `NoteCard` `MasteryTag`；`utils/date.js` `utils/photoDb.js` |
+| B · 自测备考线 | 谢林诺 | `feat/b-selftest` | P06 题库、P07 组卷、P08 作答、P09 记录错题 | `question.js` `paper.js` `record.js`；`QuestionCard` `AnswerSheet`；`utils/paper.js` |
 
 共同约定与协作方式见 [`AGENTS.md`](AGENTS.md)，分步施工与验收记录见 [`docs/开发计划.md`](docs/开发计划.md)。公共部分（项目骨架、路由表、`App.vue`、`style.css`、设计 token、公共组件）由 A 线先搭好、B 线沿用；`src/router/index.js`、`src/style.css`、`src/App.vue`、`src/stores/index.js`、`vite.config.js` 为受保护文件，需由负责人统一修改。
 
