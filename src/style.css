@@ -336,3 +336,52 @@ svg {
     grid-template-columns: 1fr;
   }
 }
+
+/* ========== B自测题库模块 ========== */
+.header-with-illust {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--sp-3);
+}
+
+.page-title {
+  font-size: var(--fs-title);
+  font-weight: 700;
+  margin: 0;
+}
+
+.illust-placeholder {
+  width: 210px;
+  height: 130px;
+  border-radius: var(--r-card);
+  background-color: var(--c-green-soft);
+  flex-shrink: 0;
+}
+
+.empty-wrap {
+  padding: var(--sp-4);
+  text-align: center;
+  color: var(--c-text-muted);
+}
+
+@media (max-width: 767px) {
+  .header-with-illust {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--sp-2);
+  }
+  .illust-placeholder {
+    width: 100%;
+    height: 80px;
+  }
+}
+
+:deep(.el-button--primary) {
+  background-color: var(--c-accent) !important;
+  border-color: var(--c-accent) !important;
+}
+:deep(.el-button--primary:hover) {
+  background-color: var(--c-accent-dark) !important;
+  border-color: var(--c-accent-dark) !important;
+}

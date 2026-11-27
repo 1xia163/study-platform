@@ -6,11 +6,13 @@
  * 插画先以占位块呈现（art 传入资源标识，如 planCalendar），
  * 后续由设计资源替换为真实图片，不影响布局。
  */
+const baseUrl = import.meta.env.BASE_URL
 defineProps({
   title: { type: String, required: true },
   desc: { type: String, default: '' },
   eyebrow: { type: String, default: '' },
   art: { type: String, default: '' },
+  artSrc: { type: String, default: '' },
 })
 </script>
 
@@ -25,9 +27,15 @@ defineProps({
       </div>
     </div>
 
-    <div v-if="art || $slots.art" class="page-header__art" aria-hidden="true">
+    <div
+      v-if="artSrc || art || $slots.art"
+      class="page-header__art"
+      :class="{ 'page-header__art--image': artSrc }"
+      aria-hidden="true"
+    >
       <slot name="art">
-        <span class="page-header__art-mark">{{ art }}</span>
+        <img v-if="artSrc" class="page-header__art-image" :src="baseUrl + artSrc" alt="" />
+        <span v-else class="page-header__art-mark">{{ art }}</span>
       </slot>
     </div>
   </header>
@@ -84,6 +92,19 @@ defineProps({
   background: var(--c-green-soft);
 }
 
+.page-header__art--image {
+  width: 300px;
+  height: 185px;
+  background: transparent;
+}
+
+.page-header__art-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: inherit;
+}
+
 .page-header__art-mark {
   padding: 0 var(--sp-2);
   font-size: var(--fs-sub);
@@ -96,6 +117,10 @@ defineProps({
     flex-direction: column;
     gap: var(--sp-2);
     margin-bottom: var(--sp-3);
+  }
+  .page-header__art--image {
+    width: 100%;
+    height: 115px;
   }
 
   .page-header__art {
