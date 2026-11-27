@@ -169,6 +169,17 @@ const canGenerate = computed(() => {
   return true
 })
 
+const draft = computed(() => {
+  const paper = qStore.currentPaper
+  return paper?.questions?.length && !paper.submitTime ? paper : null
+})
+
+const continueDraft = () => {
+  if (draft.value) {
+    router.push({ name: 'paper-detail', params: { id: draft.value.id } })
+  }
+}
+
 // 生成试卷
 const handleGenerate = () => {
   if (!canGenerate.value) {
@@ -204,6 +215,10 @@ const handleGenerate = () => {
 
   // 计算试卷总分
   const totalScore = picked.reduce((sum, q) => sum + Number(q.score || 0), 0)
+
+  if (draft.value && !window.confirm('还有一份未交卷的试卷。开始新试卷会替换原进度，确定继续？')) {
+    return
+  }
 
   // 统一保存到 currentPaper
   qStore.currentPaper = {
@@ -392,6 +407,9 @@ onMounted(() => {
 
         <!-- 底部按钮 -->
         <div class="action-row">
+          <button v-if="draft" class="btn" type="button" @click="continueDraft">
+            继续作答
+          </button>
           <button class="btn primary" :disabled="!canGenerate" @click="handleGenerate">
             生成并开始
           </button>

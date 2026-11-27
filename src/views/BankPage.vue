@@ -3,6 +3,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQuestionStore } from '@/stores/question'
+import QuestionImages from '@/components/QuestionImages.vue'
 
 const qStore = useQuestionStore()
 const route = useRoute()
@@ -320,6 +321,7 @@ const goCreatePaper = () => {
           <p class="detail-title">
             {{ currentQ.title }}
           </p>
+          <QuestionImages :images="currentQ?.images || []" />
 
           <!-- 题目选项 -->
           <div v-if="currentQ.options?.length" class="options-list">

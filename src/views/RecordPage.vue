@@ -3,6 +3,9 @@ import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import { useQuestionStore } from '@/stores/question'
+import QuestionImages from '@/components/QuestionImages.vue'
+import { hasReferenceAnswer, readPaperGrading } from '@/utils/paperGrading'
+
 const route = useRoute()
 const router = useRouter()
 const qStore = useQuestionStore()
@@ -14,7 +17,9 @@ const more = ref(null)
 
 // 读取 Pinia 中的真实记录，不依赖 currentPaper
 const records = computed(() => qStore.recordList || [])
-const wrong = computed(() => qStore.wrongList || [])
+const wrong = computed(() =>
+  (qStore.wrongList || []).filter((item) => hasReferenceAnswer(item.stdAnswer))
+)
 const course = (p) => p.course || p.questions?.[0]?.course || '未分类'
 const id = (p) => p.id ?? p.paperId
 
@@ -82,9 +87,20 @@ const date = (t) => {
     ? '时间未知'
     : d.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })
 }
-const fullScore = (p) =>
-  p.fullScore ??
-  (p.questions || []).reduce((s, q) => s + (q.type === '主观' ? 0 : Number(q.score || 0)), 0)
+const summaries = computed(() =>
+  Object.fromEntries(
+    records.value.map((paper) => [
+      id(paper),
+      paper.grading || (paper.questions?.length && paper.userAnswer)
+        ? readPaperGrading(paper)
+        : {
+            score: paper.score ?? 0,
+            fullScore: paper.fullScore,
+            pendingCount: paper.pendingCount,
+          },
+    ])
+  )
+)
 const format = (a) =>
   Array.isArray(a)
     ? a.join('、') || '未作答'
@@ -177,9 +193,21 @@ const task = (w) => {
       </div>
       <article v-for="p in filteredRecord" :key="id(p)" class="entry">
         <h3>{{ p.paperName || `${course(p)}知识点自测` }}</h3>
-        <p>
-          {{ date(time(p)) }} / 客观题得分 {{ p.score ?? 0 }} / {{ fullScore(p) }} /
-          {{ p.questions?.length || 0 }}题
+        <p>{{ date(time(p)) }} / {{ p.questions?.length || 0 }} 题</p>
+
+        <p v-if="summaries[id(p)].fullScore > 0">
+          自动得分 {{ summaries[id(p)].score }} / {{ summaries[id(p)].fullScore }} 分
+        </p>
+        <p v-else-if="summaries[id(p)].grading">本卷无可自动判分的题目</p>
+        <p v-else>已保存得分 {{ summaries[id(p)].score }} 分</p>
+
+        <p v-if="summaries[id(p)].pendingCount > 0">
+          待评阅 {{ summaries[id(p)].pendingCount }} 题
+        </p>
+        <p v-else-if="summaries[id(p)].reviewStatus === 'complete'">无待评阅题目</p>
+
+        <p v-if="summaries[id(p)].reviewFullScore > 0">
+          已评阅得分 {{ summaries[id(p)].reviewScore }} / {{ summaries[id(p)].reviewFullScore }} 分
         </p>
         <div class="actions">
           <button @click="review(p)">回看作答</button>
@@ -201,6 +229,7 @@ const task = (w) => {
           </button>
           <button @click="more = more === w.questionId ? null : w.questionId">更多</button>
         </div>
+        <QuestionImages :images="w.images || []" />
         <div v-if="expanded === w.questionId" class="explanation">
           <p>你的答案：{{ format(w.userAnswer) }}</p>
           <p>参考答案：{{ format(w.stdAnswer) }}</p>

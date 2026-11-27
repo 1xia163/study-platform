@@ -1,5 +1,11 @@
 import { defineStore } from 'pinia'
 import { questionList } from '@/utils/mockQuestion'
+import {
+  gradePaper,
+  objectiveAnswer,
+  readPaperGrading,
+  summarizeGrading,
+} from '@/utils/paperGrading'
 
 export const useQuestionStore = defineStore('question', {
   state: () => ({
@@ -29,6 +35,7 @@ export const useQuestionStore = defineStore('question', {
     // 错题列表
     wrongList: [],
   }),
+  persist: { pick: ['currentPaper', 'recordList', 'wrongList'] }, //持久化配置
   actions: {
     // 从路由query回填筛选条件（组卷页传参用）
     setFilterFromQuery(query = {}) {
@@ -107,45 +114,97 @@ export const useQuestionStore = defineStore('question', {
     // 提交试卷，保存记录+收集错题
     submitPaper() {
       const paper = this.currentPaper
-      let score = 0
-      paper.questions.forEach((q) => {
-        const userAns = paper.userAnswer[q.id]
-        let isRight = false
-        // 判断答案是否正确
-        if (Array.isArray(q.answer)) {
-          if (Array.isArray(userAns) && userAns.sort().join() === q.answer.sort().join()) {
-            isRight = true
-            score += q.score
-          }
-        } else {
-          if (userAns === q.answer) {
-            isRight = true
-            score += q.score
-          }
+      if (!paper?.questions?.length) return null
+
+      const existing = this.recordList.find(
+        (record) => String(record.id ?? record.paperId) === String(paper.id)
+      )
+      if (existing) return existing
+
+      const course = paper.course || paper.questions[0]?.course || '未分类'
+      const record = {
+        ...paper,
+        course,
+        paperName: paper.paperName || `${course}知识点自测`,
+        submitTime: Date.now(),
+        userAnswer: Object.fromEntries(
+          Object.entries(paper.userAnswer ?? {}).map(([id, answer]) => [
+            id,
+            Array.isArray(answer) ? [...answer] : answer,
+          ])
+        ),
+        ...gradePaper(paper),
+      }
+
+      const wrongList = [...this.wrongList]
+      for (const question of record.questions) {
+        if (record.grading[question.id].status !== 'wrong') continue
+
+        const item = {
+          questionId: question.id,
+          title: question.title,
+          course: question.course,
+          knowledgePoint: question.knowledgePoint,
+          userAnswer: record.userAnswer[question.id] ?? null,
+          stdAnswer: objectiveAnswer(question),
+          explanation: question.explanation,
+          lastWrongTime: record.submitTime,
+          noteId: question.noteId ?? null,
+          images: question.images || [],
         }
-        // 答错就加入错题，重复错题更新
-        if (!isRight && q.type !== '主观') {
-          const wrongItem = {
-            questionId: q.id,
-            title: q.title,
-            course: q.course,
-            knowledgePoint: q.knowledgePoint,
-            userAnswer: userAns,
-            stdAnswer: q.answer,
-            explanation: q.explanation,
-            lastWrongTime: Date.now(),
-            noteId: q.noteId ?? null,
-          }
-          const existIndex = this.wrongList.findIndex((w) => w.questionId === q.id)
-          if (existIndex >= 0) {
-            this.wrongList[existIndex] = wrongItem
-          } else {
-            this.wrongList.push(wrongItem)
-          }
+
+        const index = wrongList.findIndex((wrong) => wrong.questionId === question.id)
+        if (index === -1) wrongList.push(item)
+        else wrongList[index] = item
+      }
+
+      this.$patch({
+        currentPaper: null,
+        recordList: [record, ...this.recordList],
+        wrongList,
+      })
+      return this.recordList[0]
+    },
+
+    saveReview(paperId, questionId, { score, comment = '', source = 'manual' }) {
+      const record = this.recordList.find(
+        (item) => String(item.id ?? item.paperId) === String(paperId)
+      )
+      if (!record || !['manual', 'ai'].includes(source)) return false
+
+      const { grading } = readPaperGrading(record)
+      if (!Object.hasOwn(grading, questionId)) return false
+
+      const result = grading[questionId]
+      if (
+        !['pending', 'reviewed'].includes(result.status) ||
+        !Number.isFinite(score) ||
+        score < 0 ||
+        score > result.maxScore
+      ) {
+        return false
+      }
+
+      const summary = summarizeGrading({
+        ...grading,
+        [questionId]: {
+          ...result,
+          status: 'reviewed',
+          score,
+          comment: String(comment).trim(),
+          source,
+          reviewedAt: Date.now(),
+        },
+      })
+
+      this.$patch((state) => {
+        Object.assign(record, summary)
+        if (String(state.currentPaper?.id) === String(paperId)) {
+          Object.assign(state.currentPaper, summary)
         }
       })
-      paper.score = score
-      this.recordList.unshift(paper)
+
+      return true
     },
   },
 })

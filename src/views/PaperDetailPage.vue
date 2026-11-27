@@ -3,6 +3,8 @@ import { computed, ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import { useQuestionStore } from '@/stores/question'
+import QuestionImages from '@/components/QuestionImages.vue'
+import { hasReferenceAnswer, objectiveAnswer, readPaperGrading } from '@/utils/paperGrading'
 
 const route = useRoute()
 const router = useRouter()
@@ -16,7 +18,10 @@ const answers = ref({})
 const subjectiveAnswers = ref({})
 const isSubmitted = ref(false)
 const showFilter = ref('all')
-const objectiveScore = ref(0)
+const submittedPaper = ref(null)
+const reviewScoreInput = ref('')
+const reviewComment = ref('')
+const reviewError = ref('')
 
 // 当前题目
 const currentQuestion = computed(() => {
@@ -27,6 +32,7 @@ const currentQuestion = computed(() => {
 const totalCount = computed(() => questions.value.length)
 
 // 判断答案是否有效
+
 const hasAnswer = (q, idx) => {
   if (q.type === '主观') {
     return String(subjectiveAnswers.value[idx] || '').trim() !== ''
@@ -51,78 +57,83 @@ const unansweredCount = computed(() => {
   return totalCount.value - answeredCount.value
 })
 
-// 客观题满分
-const objectiveMaxScore = computed(() => {
-  return questions.value.reduce((sum, q) => {
-    return q.type !== '主观' ? sum + Number(q.score || 0) : sum
-  }, 0)
+const result = computed(() => {
+  const record = qStore.recordList.find(
+    (item) => String(item.id ?? item.paperId) === String(paperId.value)
+  )
+  const paper = record ?? submittedPaper.value
+  return paper ? readPaperGrading(paper) : null
 })
 
-// 多选答案排序比较，避免直接修改原数组
-const isAnswerCorrect = (q, userAns) => {
-  if (q.type === '主观' || userAns == null || userAns === '') return false
+const objectiveScore = computed(() => result.value?.score ?? 0)
+const objectiveMaxScore = computed(() => result.value?.fullScore ?? 0)
+const wrongCount = computed(() => result.value?.wrongCount ?? 0)
+const pendingCount = computed(() => result.value?.pendingCount ?? 0)
+const gradeFor = (q) => result.value?.grading?.[q.id]
+const currentGrade = computed(() => gradeFor(currentQuestion.value ?? {}))
+const currentExpected = computed(() =>
+  currentQuestion.value ? objectiveAnswer(currentQuestion.value) : null
+)
 
-  const stdAns = q.answer
-
-  if (q.type === '多选') {
-    if (!Array.isArray(userAns) || !userAns.length || !Array.isArray(stdAns)) {
-      return false
-    }
-
-    return [...userAns].sort().join(',') === [...stdAns].sort().join(',')
-  }
-
-  return userAns === stdAns
+const statusLabel = {
+  correct: '正确',
+  wrong: '错误',
+  pending: '待评阅',
+  reference: '参考答案自查',
+  reviewed: '已评阅',
 }
 
-// 当前题目是否正确
-const currentIsCorrect = computed(() => {
-  if (!isSubmitted.value || !currentQuestion.value) return false
+const feedbackTone = (status) =>
+  status === 'correct' || status === 'wrong' ? status : 'subjective'
 
-  return isAnswerCorrect(currentQuestion.value, answers.value[currentIndex.value])
-})
+const getQuestionStatus = (q, idx) =>
+  isSubmitted.value ? gradeFor(q)?.status : hasAnswer(q, idx) ? 'done' : 'empty'
 
-// 答题卡题目状态
-const getQuestionStatus = (q, idx) => {
-  if (isSubmitted.value) {
-    if (!hasAnswer(q, idx)) return 'empty'
-    if (q.type === '主观') return hasAnswer(q, idx) ? 'done' : 'empty'
-    return isAnswerCorrect(q, answers.value[idx]) ? 'correct' : 'wrong'
-  }
-
-  return hasAnswer(q, idx) ? 'done' : 'empty'
-}
-
-// 错题数量
-const wrongCount = computed(() => {
-  return questions.value.filter((q, idx) => {
-    return q.type !== '主观' && !isAnswerCorrect(q, answers.value[idx])
-  }).length
-})
-
-// 提交后显示的题目列表
-const displayQuestions = computed(() => {
-  if (showFilter.value === 'all') {
-    return questions.value.map((q, idx) => ({
-      question: q,
-      index: idx,
+const displayQuestions = computed(() =>
+  questions.value
+    .map((question, index) => ({
+      question,
+      index,
+      status: gradeFor(question)?.status,
     }))
-  }
+    .filter((item) => showFilter.value === 'all' || item.status === showFilter.value)
+)
 
-  return questions.value
-    .map((q, idx) => ({ question: q, index: idx }))
-    .filter(({ question, index }) => {
-      return question.type !== '主观' && !isAnswerCorrect(question, answers.value[index])
-    })
+watch(currentGrade, (grade) => {
+  reviewScoreInput.value = grade?.status === 'reviewed' ? grade.score : ''
+  reviewComment.value = grade?.comment ?? ''
+  reviewError.value = ''
 })
+
+const saveManualReview = () => {
+  if (
+    reviewScoreInput.value === '' ||
+    !qStore.saveReview(paperId.value, currentQuestion.value.id, {
+      score: Number(reviewScoreInput.value),
+      comment: reviewComment.value,
+    })
+  ) {
+    reviewError.value = '请输入题目分值范围内的有效分数'
+    return
+  }
+  reviewError.value = ''
+}
+
+const optionClass = (value) => {
+  if (!isSubmitted.value || currentExpected.value === null) return ''
+  const expected = currentExpected.value
+  const selected = answers.value[currentIndex.value]
+  const correct = Array.isArray(expected) ? expected.includes(value) : expected === value
+  const chosen = Array.isArray(selected) ? selected.includes(value) : selected === value
+  if (correct) return 'option-correct'
+  return chosen ? 'option-wrong' : ''
+}
 
 // 加载试卷
 onMounted(() => {
   const reviewing = route.query.isReviewed === '1'
-  const paper = reviewing
-    ? qStore.recordList.find((p) => String(p.id ?? p.paperId) === String(paperId.value)) ||
-      qStore.currentPaper
-    : qStore.currentPaper
+  const record = qStore.recordList.find((p) => String(p.id ?? p.paperId) === String(paperId.value))
+  const paper = record ?? (reviewing ? null : qStore.currentPaper)
 
   if (!paper?.questions?.length || String(paper.id ?? paper.paperId) !== String(paperId.value)) {
     router.replace({ name: 'paper-create' })
@@ -141,11 +152,11 @@ onMounted(() => {
     }
   })
 
-  if (reviewing || paper.submitTime) {
+  if (record || paper.submitTime) {
+    submittedPaper.value = paper
     isSubmitted.value = true
-    objectiveScore.value = questions.value.reduce((sum, q, idx) => {
-      return sum + (isAnswerCorrect(q, answers.value[idx]) ? Number(q.score || 0) : 0)
-    }, 0)
+  } else if (Number.isInteger(paper.currentIndex)) {
+    currentIndex.value = Math.min(Math.max(paper.currentIndex, 0), questions.value.length - 1)
   }
 })
 
@@ -160,13 +171,16 @@ const collectAnswers = () => {
   )
 }
 
-// 答案变化时同步到 Pinia，回看时不修改历史记录
+// 保存未交卷试卷的作答和题号
 watch(
-  [answers, subjectiveAnswers],
+  [answers, subjectiveAnswers, currentIndex],
   () => {
     const paper = qStore.currentPaper
     if (!isSubmitted.value && paper && String(paper.id) === String(paperId.value)) {
-      paper.userAnswer = collectAnswers()
+      qStore.$patch(() => {
+        paper.userAnswer = collectAnswers()
+        paper.currentIndex = currentIndex.value
+      })
     }
   },
   { deep: true }
@@ -208,22 +222,11 @@ const handleSubmit = () => {
     alert('试卷不存在，请重新组卷')
     return
   }
-  const message =
-    unansweredCount.value > 0
-      ? `还有 ${unansweredCount.value} 题未作答，确定提交？`
-      : '所有题目已作答，确定提交？'
-  if (!confirm(message)) return
-
-  objectiveScore.value = questions.value.reduce((sum, q, idx) => {
-    return sum + (isAnswerCorrect(q, answers.value[idx]) ? Number(q.score || 0) : 0)
-  }, 0)
-
   paper.userAnswer = collectAnswers()
-  paper.submitTime = Date.now()
-  paper.course = questions.value[0]?.course || '未分类'
-  paper.paperName = `${paper.course}知识点自测`
-  paper.fullScore = objectiveMaxScore.value
-  qStore.submitPaper()
+  const record = qStore.submitPaper()
+  if (!record) return
+
+  submittedPaper.value = record
   isSubmitted.value = true
 }
 
@@ -236,7 +239,7 @@ const showAllQuestions = () => {
 // 结果页跳转
 const goNote = () => router.push({ name: 'note-list' })
 const goPlan = () => router.push({ name: 'plan' })
-const goWrong = () => router.push({ name: 'record' })
+const goWrong = () => router.push({ name: 'record', query: { tab: 'wrong' } })
 const backCreate = () => router.push({ name: 'paper-create' })
 
 // 显示答案
@@ -333,12 +336,13 @@ const formatAnswer = (answer) => {
         <div v-if="isSubmitted" class="side-card score-card">
           <h3>本次成绩</h3>
 
-          <div class="score-number">
+          <div v-if="objectiveMaxScore > 0" class="score-number">
             {{ objectiveScore }}
             <small>/ {{ objectiveMaxScore }} 分</small>
           </div>
-
-          <p>客观题得分</p>
+          <p v-if="objectiveMaxScore > 0">自动得分</p>
+          <p v-else>本卷无可自动判分的题目</p>
+          <p>待评阅 {{ pendingCount }} 题</p>
 
           <div class="score-detail">
             <span>客观题错题</span>
@@ -375,31 +379,18 @@ const formatAnswer = (answer) => {
             <span class="question-type">{{ currentQuestion.type }}题</span>
 
             <span class="question-score">{{ currentQuestion.score }} 分</span>
-
             <span
-              v-if="isSubmitted"
-              :class="[
-                'result-label',
-                currentQuestion.type === '主观'
-                  ? 'result-subjective'
-                  : currentIsCorrect
-                    ? 'result-correct'
-                    : 'result-wrong',
-              ]"
+              v-if="isSubmitted && currentGrade"
+              :class="['result-label', `result-${feedbackTone(currentGrade.status)}`]"
             >
-              {{
-                currentQuestion.type === '主观'
-                  ? '主观题'
-                  : currentIsCorrect
-                    ? '回答正确'
-                    : '回答错误'
-              }}
+              {{ statusLabel[currentGrade.status] }}
             </span>
           </div>
 
           <h3 class="question-title">
             {{ currentQuestion.title }}
           </h3>
+          <QuestionImages :images="currentQuestion?.images || []" />
 
           <!-- 单选题 -->
           <div v-if="currentQuestion.type === '单选'" class="option-list">
@@ -411,16 +402,8 @@ const formatAnswer = (answer) => {
                 {
                   selected: answers[currentIndex] === String.fromCharCode(65 + oi),
                 },
-                {
-                  'option-correct':
-                    isSubmitted && currentQuestion.answer === String.fromCharCode(65 + oi),
-                },
-                {
-                  'option-wrong':
-                    isSubmitted &&
-                    answers[currentIndex] === String.fromCharCode(65 + oi) &&
-                    !currentIsCorrect,
-                },
+                // 单选、多选各使用这一项
+                optionClass(String.fromCharCode(65 + oi)),
               ]"
             >
               <input
@@ -450,10 +433,7 @@ const formatAnswer = (answer) => {
                     Array.isArray(answers[currentIndex]) &&
                     answers[currentIndex].includes(String.fromCharCode(65 + oi)),
                 },
-                {
-                  'option-correct':
-                    isSubmitted && currentQuestion.answer?.includes(String.fromCharCode(65 + oi)),
-                },
+                optionClass(String.fromCharCode(65 + oi)),
               ]"
             >
               <input
@@ -486,13 +466,7 @@ const formatAnswer = (answer) => {
               :class="[
                 'option-item',
                 { selected: answers[currentIndex] === opt.value },
-                {
-                  'option-correct': isSubmitted && currentQuestion.answer === opt.value,
-                },
-                {
-                  'option-wrong':
-                    isSubmitted && answers[currentIndex] === opt.value && !currentIsCorrect,
-                },
+                optionClass(opt.value),
               ]"
             >
               <input
@@ -515,7 +489,13 @@ const formatAnswer = (answer) => {
               placeholder="请在这里填写你的答案……"
             ></textarea>
 
-            <p class="input-tip">主观题暂不自动判分，请根据参考答案自行核对</p>
+            <p class="input-tip">
+              {{
+                hasReferenceAnswer(currentQuestion.answer)
+                  ? '提交后可根据参考答案自行核对'
+                  : '暂无参考答案，提交后保留作答，可录入评阅结果'
+              }}
+            </p>
           </div>
 
           <!-- 提交后显示解析 -->
@@ -535,8 +515,46 @@ const formatAnswer = (answer) => {
 
             <div class="result-row">
               <strong>参考答案</strong>
-              <span>{{ formatAnswer(currentQuestion.answer) }}</span>
+              <span v-if="currentQuestion.type === '主观'">
+                {{
+                  hasReferenceAnswer(currentQuestion.answer)
+                    ? formatAnswer(currentQuestion.answer)
+                    : '暂无参考答案'
+                }}
+              </span>
+              <span v-else>
+                {{ currentExpected === null ? '暂无参考答案' : formatAnswer(currentExpected) }}
+              </span>
             </div>
+
+            <form
+              v-if="['pending', 'reviewed'].includes(currentGrade?.status)"
+              @submit.prevent="saveManualReview"
+            >
+              <p v-if="currentGrade.status === 'reviewed'">
+                已评阅 {{ currentGrade.score }} / {{ currentGrade.maxScore }} 分
+              </p>
+
+              <label>
+                评阅分数
+                <input
+                  v-model.number="reviewScoreInput"
+                  type="number"
+                  min="0"
+                  :max="currentGrade.maxScore"
+                  step="any"
+                  required
+                />
+              </label>
+
+              <label>
+                评语
+                <textarea v-model="reviewComment" rows="3"></textarea>
+              </label>
+
+              <button class="action-btn secondary" type="submit">保存评阅</button>
+              <p v-if="reviewError" role="alert">{{ reviewError }}</p>
+            </form>
 
             <div class="result-explanation">
               <strong>答案解析</strong>
@@ -604,23 +622,8 @@ const formatAnswer = (answer) => {
                 {{ item.question.title }}
               </span>
 
-              <span
-                :class="[
-                  'filter-status',
-                  item.question.type === '主观'
-                    ? 'status-subjective'
-                    : isAnswerCorrect(item.question, answers[item.index])
-                      ? 'status-correct'
-                      : 'status-wrong',
-                ]"
-              >
-                {{
-                  item.question.type === '主观'
-                    ? '主观题'
-                    : isAnswerCorrect(item.question, answers[item.index])
-                      ? '正确'
-                      : '错误'
-                }}
+              <span :class="['filter-status', `status-${feedbackTone(item.status)}`]">
+                {{ statusLabel[item.status] }}
               </span>
             </button>
           </div>
