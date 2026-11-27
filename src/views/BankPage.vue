@@ -138,7 +138,13 @@ const goCreatePaper = () => {
 <template>
   <div class="bank-page">
     <!-- 页面标题 -->
-    <PageHeader eyebrow="P06 · F06" title="真题题库" desc="按课程和知识点查找" art="真题卡片">
+    <PageHeader
+      eyebrow="P06 · F06"
+      title="真题题库"
+      desc="按课程和知识点查找"
+      art="真题卡片"
+      art-src="page-illustrations/p06-question-shelf.png"
+    >
       <template #actions>
         <button class="btn primary" @click="goCreatePaper">按条件组卷</button>
       </template>

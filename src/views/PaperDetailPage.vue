@@ -267,6 +267,7 @@ const formatAnswer = (answer) => {
       title="作答与反馈"
       desc="作答完成后提交，查看得分与逐题解析"
       art="安静书写作答"
+      art-src="page-illustrations/p08-answer-desk.png"
     />
 
     <section v-if="totalCount > 0" class="answer-layout">

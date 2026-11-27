@@ -306,6 +306,7 @@ onMounted(() => {
       title="规则组卷"
       desc="先确认筛选条件与各题型数量，生成后计算本次试卷的实际总分。"
       art="paperArrange"
+      art-src="page-illustrations/p07-paper-arrange.png"
     />
 
     <!-- 主体左右布局 -->
@@ -407,9 +408,7 @@ onMounted(() => {
 
         <!-- 底部按钮 -->
         <div class="action-row">
-          <button v-if="draft" class="btn" type="button" @click="continueDraft">
-            继续作答
-          </button>
+          <button v-if="draft" class="btn" type="button" @click="continueDraft">继续作答</button>
           <button class="btn primary" :disabled="!canGenerate" @click="handleGenerate">
             生成并开始
           </button>

@@ -143,6 +143,7 @@ const task = (w) => {
       title="练习记录与错题"
       desc="回看练习，安排复习"
       art="放大镜与复盘"
+      art-src="page-illustrations/p09-review-notebook.png"
     />
     <nav class="subnav">
       <button @click="router.push({ name: 'bank' })">题库</button>
