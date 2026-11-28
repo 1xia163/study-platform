@@ -1,17 +1,22 @@
 <script setup>
+import { computed } from 'vue'
+
 /**
  * 页面标题区 —— 对应 02 设计：业务页标题 32px，桌面插画置右 210×130，
  * 手机改为标题下方的紧凑插画横幅 108×80（这里用整宽横幅）。
  *
- * 插画先以占位块呈现（art 传入资源标识，如 planCalendar），
- * 后续由设计资源替换为真实图片，不影响布局。
+ * art 传文字占位；artSrc 传图片路径（如 /illustrations/p02-plan-calendar.png），
+ * 两者都不传时保持原样，只有标题和操作区。
  */
-defineProps({
+const props = defineProps({
   title: { type: String, required: true },
   desc: { type: String, default: '' },
   eyebrow: { type: String, default: '' },
   art: { type: String, default: '' },
+  artSrc: { type: String, default: '' },
 })
+
+const artAlt = computed(() => props.art || props.title)
 </script>
 
 <template>
@@ -25,9 +30,10 @@ defineProps({
       </div>
     </div>
 
-    <div v-if="art || $slots.art" class="page-header__art" aria-hidden="true">
+    <div v-if="artSrc || art || $slots.art" class="page-header__art" aria-hidden="true">
       <slot name="art">
-        <span class="page-header__art-mark">{{ art }}</span>
+        <img v-if="artSrc" class="page-header__art-image" :src="artSrc" :alt="artAlt" />
+        <span v-else class="page-header__art-mark">{{ art }}</span>
       </slot>
     </div>
   </header>
@@ -89,6 +95,13 @@ defineProps({
   font-size: var(--fs-sub);
   color: var(--c-green);
   text-align: center;
+}
+
+.page-header__art-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 @media (max-width: 767px) {
